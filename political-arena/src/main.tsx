@@ -25,6 +25,7 @@ import {
 } from "./utils";
 import { parseWithOpenAI } from "./parser";
 import { sampleText } from "./sample";
+import { downloadTableAsPng } from "./exportImage";
 
 const API_KEY_STORAGE = "political-arena-openai-key";
 const MODEL_STORAGE = "political-arena-model";
@@ -82,6 +83,28 @@ function App() {
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "אירעה שגיאה בפרסור.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportImage() {
+    if (!table || !ready) {
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+
+    try {
+      await downloadTableAsPng(table);
+      setMessage("התמונה נוצרה בהצלחה.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "אירעה שגיאה ביצירת התמונה.",
       );
     } finally {
       setBusy(false);
@@ -283,10 +306,19 @@ function App() {
               </button>
               <button
                 className="primary"
-                disabled={!ready}
+                disabled={!ready || busy}
+                onClick={exportImage}
                 title={!ready ? "כל הסקרים צריכים להסתכם ל־120" : ""}
               >
-                <ImageDown size={17} /> צור תמונה
+                {busy ? (
+                  <>
+                    <LoaderCircle className="spin" size={17} /> יוצר תמונה...
+                  </>
+                ) : (
+                  <>
+                    <ImageDown size={17} /> צור תמונה
+                  </>
+                )}
               </button>
             </div>
           </div>
