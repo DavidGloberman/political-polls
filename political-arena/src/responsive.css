@@ -1,0 +1,345 @@
+/* Responsive overrides for phones and narrow tablets. */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+.scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+@media (max-width: 800px) {
+  header {
+    min-height: 64px;
+    height: auto;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .brand {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .brand b {
+    font-size: 18px;
+  }
+
+  .brand small {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .logo {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 11px;
+  }
+
+  .top-actions {
+    flex-shrink: 0;
+  }
+
+  .top-actions .ghost,
+  .top-actions .primary {
+    min-height: 36px;
+    padding-inline: 10px;
+  }
+
+  .landing {
+    width: 100%;
+    padding: 38px 12px 45px;
+  }
+
+  .hero h1 {
+    font-size: clamp(32px, 9vw, 39px);
+    letter-spacing: -0.8px;
+    margin: 13px 0;
+  }
+
+  .hero > p {
+    font-size: 14px;
+    line-height: 1.65;
+    margin-bottom: 24px;
+  }
+
+  .paste,
+  .editor,
+  .add {
+    border-radius: 15px;
+  }
+
+  .paste {
+    padding: 13px;
+  }
+
+  .paste-head {
+    gap: 10px;
+  }
+
+  .paste textarea {
+    min-height: 220px;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .paste-foot {
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .paste-foot .primary {
+    min-height: 40px;
+    padding-inline: 12px;
+  }
+
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 17px;
+  }
+
+  .steps span {
+    padding: 9px;
+    font-size: 11px;
+  }
+
+  .work {
+    width: 100%;
+    max-width: 100%;
+    padding: 22px 10px 45px;
+  }
+
+  .work-head {
+    margin-bottom: 12px;
+    gap: 11px;
+  }
+
+  .work-head h1 {
+    font-size: 27px;
+    line-height: 1.2;
+  }
+
+  .work-head p {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .actions button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .warning {
+    padding: 11px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  .warning span {
+    display: block;
+    margin: 4px 0 0;
+    line-height: 1.5;
+  }
+
+  .title {
+    min-width: 0;
+    gap: 7px;
+    padding: 10px 11px;
+  }
+
+  .title input {
+    min-width: 0;
+    font-size: 16px;
+    padding: 6px;
+  }
+
+  .title span {
+    flex-shrink: 0;
+    font-size: 10px;
+  }
+
+  .editor-foot {
+    padding: 10px 11px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .editor-foot span {
+    min-width: 0;
+  }
+
+  table {
+    min-width: 760px;
+  }
+
+  th {
+    min-width: 105px;
+    height: 58px;
+  }
+
+  .poll-table th:first-child,
+  .party-cell,
+  tbody td:first-child {
+    min-width: 190px;
+  }
+
+  th,
+  td {
+    font-size: 12px;
+  }
+
+  tbody td {
+    height: 52px;
+  }
+
+  .num {
+    width: 58px;
+    height: 36px;
+  }
+
+  .add {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 13px;
+    gap: 10px;
+  }
+
+  .add > div {
+    min-width: 0;
+  }
+
+  .add textarea {
+    width: 100%;
+    min-height: 82px;
+    height: 82px;
+  }
+
+  .add .primary {
+    width: 100%;
+  }
+
+  .backdrop {
+    padding: 12px;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    padding: 16px;
+    border-radius: 15px;
+  }
+
+  .modal-actions {
+    gap: 8px;
+  }
+
+  .modal-actions button {
+    flex: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .top-actions .ghost {
+    display: none;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .landing {
+    padding-inline: 9px;
+  }
+
+  .hero h1 {
+    font-size: 31px;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+  }
+
+  .paste-foot {
+    flex-direction: column;
+  }
+
+  .paste-foot .primary {
+    width: 100%;
+  }
+
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .work {
+    padding-inline: 7px;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions button:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .title span {
+    display: none;
+  }
+
+  .poll-table th:first-child,
+  .party-cell,
+  tbody td:first-child {
+    min-width: 165px;
+  }
+
+  table {
+    min-width: 700px;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+}
+
+@media (max-width: 360px) {
+  .brand b {
+    font-size: 16px;
+  }
+
+  .work-head h1 {
+    font-size: 24px;
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .actions button:last-child {
+    grid-column: auto;
+  }
+} 
