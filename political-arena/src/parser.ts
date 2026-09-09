@@ -1,12 +1,45 @@
-import type { ParseResponse, ParsedPoll } from "./types";
+import type {
+  ParseResponse,
+  ParsedPoll,
+  PartyDictionaryEntry,
+} from "./types";
 import { createId } from "./utils";
 
-const SYSTEM = `You strictly parse Hebrew election poll text. Return ONLY JSON. Do not invent, infer, correct, calculate, or add data. Numeric seats must be integers explicitly present. If a party has no numeric seat count or is explicitly described as not passing the threshold, seats=null. Source is required; if it cannot be identified, return an empty polls array. Preserve supplied source and party names. Shape: {"polls":[{"source":"string","parties":[{"name":"string","seats":number|null}]}]}.`;
+const SYSTEM = `You are a strict parser for Hebrew election poll text.
+
+Your task has exactly two responsibilities:
+1. Extract polls, their source names, party names, and seat counts from the supplied text.
+2. Match each extracted party to the supplied party dictionary.
+
+Party matching rules:
+- Match a party ONLY when the party name exactly matches a dictionary entry's name or one of its aliases, after trimming whitespace and collapsing repeated whitespace.
+- Do not use political knowledge, external knowledge, semantic similarity, abbreviations, spelling correction, punctuation interpretation, or guessing to create a match.
+- If there is no exact dictionary match, return partyId=null. Do not invent an ID.
+- Preserve the party name as it appears in the source text in sourceName.
+
+Parsing rules:
+- Return only information explicitly present in the supplied text.
+- Do not invent, infer, correct, calculate, complete, or redistribute seat counts.
+- seats must be the integer explicitly associated with that party, or null when no numeric seat count is explicitly present.
+- If a party is explicitly described as not passing the threshold and no seat count is present, seats=null.
+- Source is required. If a poll source cannot be identified, do not invent one.
+- Do not merge two source names unless the text itself identifies them as the same source.
+- Do not create parties that are not represented by the supplied text.
+- Return JSON only and follow the supplied schema exactly.`;
+
+function buildDictionaryText(dictionary: PartyDictionaryEntry[]) {
+  return JSON.stringify(
+    dictionary.map(({ id, name, aliases }) => ({ id, name, aliases })),
+    null,
+    2,
+  );
+}
 
 export async function parseWithOpenAI(
   text: string,
   apiKey: string,
   model: string,
+  dictionary: PartyDictionaryEntry[],
 ): Promise<ParsedPoll[]> {
   if (!apiKey.trim()) {
     throw new Error("חסר API Key. היכנס להגדרות והוסף מפתח AI.");
@@ -22,7 +55,10 @@ export async function parseWithOpenAI(
       model: model || "gpt-5-mini",
       input: [
         { role: "system", content: SYSTEM },
-        { role: "user", content: text },
+        {
+          role: "user",
+          content: `PARTY_DICTIONARY:\n${buildDictionaryText(dictionary)}\n\nPOLL_TEXT:\n${text}`,
+        },
       ],
       text: {
         format: {
@@ -46,10 +82,11 @@ export async function parseWithOpenAI(
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                          name: { type: "string" },
+                          partyId: { type: ["string", "null"] },
+                          sourceName: { type: "string" },
                           seats: { type: ["integer", "null"] },
                         },
-                        required: ["name", "seats"],
+                        required: ["partyId", "sourceName", "seats"],
                       },
                     },
                   },
@@ -86,10 +123,18 @@ export async function parseWithOpenAI(
   }
 
   const parsedResponse = JSON.parse(outputText) as ParseResponse;
+  const knownPartyIds = new Set(dictionary.map((party) => party.id));
 
   return parsedResponse.polls.map((poll) => ({
     id: createId("parsed"),
     source: poll.source,
-    parties: poll.parties,
+    parties: poll.parties.map((party) => ({
+      name: party.sourceName,
+      seats: party.seats,
+      partyId:
+        party.partyId && knownPartyIds.has(party.partyId)
+          ? party.partyId
+          : undefined,
+    })) as ParsedPoll["parties"],
   }));
 }
