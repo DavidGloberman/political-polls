@@ -1,6 +1,7 @@
 import type {
   CellValue,
   ParsedPoll,
+  PartyDictionaryEntry,
   PollTable,
   TableParty,
   ValidationResult,
@@ -10,25 +11,7 @@ export const createId = (prefix = "id") =>
   `${prefix}-${crypto.randomUUID()}`;
 
 export function normalizePartyName(name: string) {
-  return name
-    .trim()
-    .replace(/[״”"']/g, "")
-    .replace(/\s+/g, " ")
-    .toLocaleLowerCase("he")
-    .replace(/^הרשימה\s+/, "")
-    .replace(/^מפלגת\s+/, "");
-}
-
-export function displayPartyName(name: string) {
-  const normalizedName = normalizePartyName(name);
-  const displayNames: Record<string, string> = {
-    שס: "ש״ס",
-    רעמ: "רע״ם",
-    "הרשימה המשותפת": "המשותפת",
-    ישר: "ישר!",
-  };
-
-  return displayNames[normalizedName] ?? name.trim();
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("he");
 }
 
 export function validatePoll(poll: {
@@ -72,9 +55,28 @@ export function validateTable(table: PollTable): ValidationResult[] {
 export const allValid = (table: PollTable) =>
   validateTable(table).every((result) => result.valid);
 
+function addDictionaryEntry(
+  dictionary: PartyDictionaryEntry[],
+  party: TableParty,
+  sourceName: string,
+) {
+  const existing = dictionary.find((entry) => entry.id === party.id);
+
+  if (existing) {
+    return;
+  }
+
+  dictionary.push({
+    id: party.id,
+    name: party.name,
+    aliases: sourceName === party.name ? [] : [sourceName],
+  });
+}
+
 export function mergePolls(
   table: PollTable | null,
   incomingPolls: ParsedPoll[],
+  dictionary: PartyDictionaryEntry[] = [],
 ): PollTable {
   const nextTable: PollTable = table
     ? structuredClone(table)
@@ -85,6 +87,9 @@ export function mergePolls(
         parties: [],
       };
 
+  const partiesById = new Map(
+    nextTable.parties.map((party) => [party.id, party]),
+  );
   const partiesByName = new Map(
     nextTable.parties.map((party) => [normalizePartyName(party.name), party]),
   );
@@ -97,24 +102,24 @@ export function mergePolls(
     });
 
     for (const rawParty of incomingPoll.parties) {
-      const normalizedName = normalizePartyName(rawParty.name);
-      let party = partiesByName.get(normalizedName);
+      let party = rawParty.partyId
+        ? partiesById.get(rawParty.partyId)
+        : undefined;
 
-      if (
-        !party &&
-        normalizedName === normalizePartyName("הרשימה המשותפת")
-      ) {
-        party = partiesByName.get(normalizePartyName("המשותפת"));
+      if (!party) {
+        party = partiesByName.get(normalizePartyName(rawParty.name));
       }
 
       if (!party) {
         const newParty: TableParty = {
           id: createId("party"),
-          name: displayPartyName(rawParty.name),
+          name: rawParty.name.trim(),
           values: {},
         };
         nextTable.parties.push(newParty);
-        partiesByName.set(normalizedName, newParty);
+        partiesById.set(newParty.id, newParty);
+        partiesByName.set(normalizePartyName(newParty.name), newParty);
+        addDictionaryEntry(dictionary, newParty, rawParty.name.trim());
         party = newParty;
       }
 
