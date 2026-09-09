@@ -59,7 +59,13 @@ export async function downloadTableAsPng(table: PollTable) {
         <stop offset="0%" stop-color="#263a78"/>
         <stop offset="100%" stop-color="#4a3e9a"/>
       </linearGradient>
-      <filter id="glow"><feGaussianBlur stdDeviation="12" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="12" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
     </defs>`;
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
@@ -88,16 +94,29 @@ export async function downloadTableAsPng(table: PollTable) {
     const y = tableY + headerHeight + rowIndex * rowHeight;
     const fill = rowIndex % 2 === 0 ? "#0d1d38" : "#102442";
     svg += `<rect x="${partyX}" y="${y}" width="${partyWidth}" height="${rowHeight}" fill="${fill}"/>`;
-    svg += text(displayPartyName(party.name), partyX + partyWidth / 2, y + 42, 20, 800);
+    svg += text(
+      displayPartyName(party.name),
+      partyX + partyWidth / 2,
+      y + 42,
+      20,
+      800,
+    );
     table.polls.forEach((poll, index) => {
       const x = partyX - (index + 1) * pollWidth;
       svg += `<rect x="${x}" y="${y}" width="${pollWidth}" height="${rowHeight}" fill="${fill}"/>`;
       const value = party.values[poll.id];
-      svg += text(value == null ? "--" : String(value), x + pollWidth / 2, y + 42, 24, 900);
+      svg += text(
+        value == null ? "--" : String(value),
+        x + pollWidth / 2,
+        y + 42,
+        24,
+        900,
+      );
     });
   });
 
-  const totalY = tableY + headerHeight + table.parties.length * rowHeight;
+  const totalY =
+    tableY + headerHeight + table.parties.length * rowHeight;
   svg += `<rect x="${partyX}" y="${totalY}" width="${partyWidth}" height="${rowHeight}" fill="#19345d"/>`;
   svg += text("סה״כ", partyX + partyWidth / 2, totalY + 42, 21, 900);
   validation.forEach((result, index) => {
@@ -106,7 +125,8 @@ export async function downloadTableAsPng(table: PollTable) {
     svg += text(String(result.total), x + pollWidth / 2, totalY + 42, 22, 900);
   });
 
-  const fullTableHeight = headerHeight + (table.parties.length + 1) * rowHeight;
+  const fullTableHeight =
+    headerHeight + (table.parties.length + 1) * rowHeight;
   svg += `<rect x="${tableX}" y="${tableY}" width="${tableWidth}" height="${fullTableHeight}" rx="12" fill="none" stroke="#3b5683" stroke-width="2"/>`;
   for (let i = 1; i < table.polls.length + 1; i++) {
     const x = partyX - i * pollWidth;
@@ -118,8 +138,22 @@ export async function downloadTableAsPng(table: PollTable) {
     svg += `<line x1="${tableX}" y1="${y}" x2="${tableX + tableWidth}" y2="${y}" stroke="#29466f" stroke-width="1"/>`;
   }
 
-  svg += text("נתונים. תמונה גדולה יותר.", margin, height - 27, 14, 500, "start");
-  svg += text("זירה פוליטית", width - margin, height - 27, 14, 700, "end");
+  svg += text(
+    "נתונים. תמונה גדולה יותר.",
+    margin,
+    height - 27,
+    14,
+    500,
+    "start",
+  );
+  svg += text(
+    "זירה פוליטית",
+    width - margin,
+    height - 27,
+    14,
+    700,
+    "end",
+  );
   svg += `</svg>`;
 
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
