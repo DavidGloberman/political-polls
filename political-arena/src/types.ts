@@ -9,6 +9,7 @@ export interface PartyDictionaryEntry {
 export interface ParsedParty {
   name: string;
   seats: number | null;
+  partyId?: string;
 }
 
 export interface ParsedPoll {
