@@ -1,0 +1,82 @@
+.menu-wrap {
+  position: relative;
+}
+
+.menu-button {
+  min-width: 40px;
+  justify-content: center;
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: #111827;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.menu-dropdown button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: transparent;
+  color: #fff;
+  text-align: right;
+  cursor: pointer;
+}
+
+.menu-dropdown button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dictionary-modal {
+  max-width: 680px;
+}
+
+.dictionary-list {
+  display: grid;
+  gap: 12px;
+  max-height: 55vh;
+  overflow: auto;
+  margin: 16px 0;
+  padding-right: 2px;
+}
+
+.dictionary-item {
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+}
+
+.dictionary-name-row,
+.alias-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dictionary-name-row input,
+.alias-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.aliases {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0;
+  padding-right: 16px;
+}
+
+.alias-row input {
+  font-size: 13px;
+}
