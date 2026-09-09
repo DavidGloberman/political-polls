@@ -1,5 +1,11 @@
 export type CellValue = number | null;
 
+export interface PartyDictionaryEntry {
+  id: string;
+  name: string;
+  aliases: string[];
+}
+
 export interface ParsedParty {
   name: string;
   seats: number | null;
@@ -42,7 +48,8 @@ export interface ParseResponse {
   polls: Array<{
     source: string;
     parties: Array<{
-      name: string;
+      partyId: string | null;
+      sourceName: string;
       seats: number | null;
     }>;
   }>;
