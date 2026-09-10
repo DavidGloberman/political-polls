@@ -7,24 +7,24 @@ import { createId, normalizePartyName } from "./utils";
 
 const SYSTEM = `You are a strict parser for Hebrew election poll text.
 
-Your task has exactly two responsibilities:
-1. Extract polls, their source names, party names, and seat counts from the supplied text.
-2. Match each extracted party to the supplied party dictionary.
+Your only responsibility is to extract the data explicitly written in the supplied text.
 
-Party matching rules:
-- Match a party ONLY when the party name exactly matches a dictionary entry's name or one of its aliases, after trimming whitespace and collapsing repeated whitespace.
-- Do not use political knowledge, external knowledge, semantic similarity, abbreviations, spelling correction, punctuation interpretation, or guessing to create a match.
-- If there is no exact dictionary match, return partyId=null. Do not invent an ID.
-- Preserve the party name as it appears in the source text in sourceName.
+Extract:
+1. Each poll and its source name.
+2. Each party name exactly as it appears in that poll.
+3. The integer seat count explicitly associated with that party.
 
 Parsing rules:
 - Return only information explicitly present in the supplied text.
-- Do not invent, infer, correct, calculate, complete, or redistribute seat counts.
+- Do not invent, infer, correct, calculate, complete, redistribute, or guess seat counts.
 - seats must be the integer explicitly associated with that party, or null when no numeric seat count is explicitly present.
 - If a party is explicitly described as not passing the threshold and no seat count is present, seats=null.
+- Preserve the party name as it appears in the source text in sourceName.
 - Source is required. If a poll source cannot be identified, do not invent one.
 - Do not merge two source names unless the text itself identifies them as the same source.
 - Do not create parties that are not represented by the supplied text.
+- Do not use political knowledge or external knowledge.
+- Do not match parties to a dictionary. Party matching is performed deterministically by the application after parsing.
 - Return JSON only and follow the supplied schema exactly.`;
 
 function buildDictionaryText(dictionary: PartyDictionaryEntry[]) {
@@ -70,6 +70,7 @@ function findDictionaryPartyId(
   dictionary: PartyDictionaryEntry[],
 ) {
   const normalizedSourceName = normalizePartyName(sourceName);
+
   return dictionary.find((party) =>
     [party.name, ...party.aliases].some(
       (name) => normalizePartyName(name) === normalizedSourceName,
@@ -77,37 +78,13 @@ function findDictionaryPartyId(
   )?.id;
 }
 
-function isKnownPartyMatch(
-  partyId: string,
-  sourceName: string,
-  dictionary: PartyDictionaryEntry[],
-) {
-  const party = dictionary.find((entry) => entry.id === partyId);
-
-  if (!party) {
-    return false;
-  }
-
-  const normalizedSourceName = normalizePartyName(sourceName);
-
-  return (
-    normalizePartyName(party.name) === normalizedSourceName ||
-    party.aliases.some(
-      (alias) => normalizePartyName(alias) === normalizedSourceName,
-    )
-  );
-}
-
-function validateParseResponse(
-  response: ParseResponse,
-  dictionary: PartyDictionaryEntry[],
-) {
+function validateParseResponse(response: ParseResponse) {
   for (const poll of response.polls) {
     if (!poll.source.trim()) {
       throw new Error("ה-AI החזיר סקר ללא מקור.");
     }
 
-    const seenPartyIds = new Set<string>();
+    const seenNames = new Set<string>();
 
     for (const party of poll.parties) {
       if (!party.sourceName.trim()) {
@@ -118,26 +95,13 @@ function validateParseResponse(
         throw new Error("ה-AI החזיר מספר מנדטים לא תקין.");
       }
 
-      const resolvedPartyId =
-        party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary);
-
-      if (party.partyId !== null) {
-        if (!isKnownPartyMatch(party.partyId, party.sourceName, dictionary)) {
-          throw new Error(
-            `ה-AI ניסה לשייך את "${party.sourceName}" למפלגה שאינה תואמת למילון.`,
-          );
-        }
-      }
-
-      if (resolvedPartyId && seenPartyIds.has(resolvedPartyId)) {
+      const normalizedName = normalizePartyName(party.sourceName);
+      if (seenNames.has(normalizedName)) {
         throw new Error(
           `המפלגה "${party.sourceName}" הופיעה יותר מפעם אחת באותו סקר.`,
         );
       }
-
-      if (resolvedPartyId) {
-        seenPartyIds.add(resolvedPartyId);
-      }
+      seenNames.add(normalizedName);
     }
   }
 }
@@ -166,7 +130,7 @@ export async function parseWithOpenAI(
         { role: "system", content: SYSTEM },
         {
           role: "user",
-          content: `PARTY_DICTIONARY:\n${buildDictionaryText(dictionary)}\n\nPOLL_TEXT:\n${text}`,
+          content: `PARTY_DICTIONARY_REFERENCE:\n${buildDictionaryText(dictionary)}\n\nPOLL_TEXT:\n${text}`,
         },
       ],
       text: {
@@ -191,11 +155,10 @@ export async function parseWithOpenAI(
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                          partyId: { type: ["string", "null"] },
                           sourceName: { type: "string" },
                           seats: { type: ["integer", "null"] },
                         },
-                        required: ["partyId", "sourceName", "seats"],
+                        required: ["sourceName", "seats"],
                       },
                     },
                   },
@@ -239,23 +202,21 @@ export async function parseWithOpenAI(
     throw new Error("ה-AI החזיר JSON לא תקין.");
   }
 
-  validateParseResponse(parsedResponse, dictionary);
+  validateParseResponse(parsedResponse);
 
   const knownPartyIds = new Set(dictionary.map((party) => party.id));
 
   return parsedResponse.polls.map((poll) => ({
     id: createId("parsed"),
     source: poll.source.trim(),
-    parties: poll.parties.map((party) => ({
-      name: party.sourceName.trim(),
-      seats: party.seats,
-      partyId:
-        (party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary)) &&
-        knownPartyIds.has(
-          party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary)!,
-        )
-          ? party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary)
-          : undefined,
-    })) as ParsedPoll["parties"],
+    parties: poll.parties.map((party) => {
+      const partyId = findDictionaryPartyId(party.sourceName, dictionary);
+
+      return {
+        name: party.sourceName.trim(),
+        seats: party.seats,
+        partyId: partyId && knownPartyIds.has(partyId) ? partyId : undefined,
+      };
+    }) as ParsedPoll["parties"],
   }));
 }
