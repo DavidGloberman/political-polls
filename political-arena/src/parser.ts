@@ -1,8 +1,4 @@
-import type {
-  ParseResponse,
-  ParsedPoll,
-  PartyDictionaryEntry,
-} from "./types";
+import type { ParseResponse, ParsedPoll } from "./types";
 import { createId, normalizePartyName } from "./utils";
 
 const SYSTEM = `You are a strict parser for Hebrew election poll text.
@@ -26,57 +22,6 @@ Parsing rules:
 - Do not use political knowledge or external knowledge.
 - Do not match parties to a dictionary. Party matching is performed deterministically by the application after parsing.
 - Return JSON only and follow the supplied schema exactly.`;
-
-function buildDictionaryText(dictionary: PartyDictionaryEntry[]) {
-  return JSON.stringify(
-    dictionary.map(({ id, name, aliases }) => ({ id, name, aliases })),
-    null,
-    2,
-  );
-}
-
-function validateDictionary(dictionary: PartyDictionaryEntry[]) {
-  const names = new Map<string, string>();
-
-  for (const entry of dictionary) {
-    if (!entry.id.trim() || !entry.name.trim()) {
-      throw new Error("מילון המפלגות מכיל רשומה ללא ID או שם.");
-    }
-
-    const values = [entry.name, ...entry.aliases];
-
-    for (const value of values) {
-      const normalized = normalizePartyName(value);
-
-      if (!normalized) {
-        continue;
-      }
-
-      const existingPartyId = names.get(normalized);
-
-      if (existingPartyId && existingPartyId !== entry.id) {
-        throw new Error(
-          `השם "${value.trim()}" משויך ליותר ממפלגה אחת במילון.`,
-        );
-      }
-
-      names.set(normalized, entry.id);
-    }
-  }
-}
-
-function findDictionaryPartyId(
-  sourceName: string,
-  dictionary: PartyDictionaryEntry[],
-) {
-  const normalizedSourceName = normalizePartyName(sourceName);
-
-  return dictionary.find((party) =>
-    [party.name, ...party.aliases].some(
-      (name) => normalizePartyName(name) === normalizedSourceName,
-    ),
-  )?.id;
-}
 
 function validateParseResponse(response: ParseResponse) {
   for (const poll of response.polls) {
@@ -110,13 +55,11 @@ export async function parseWithOpenAI(
   text: string,
   apiKey: string,
   model: string,
-  dictionary: PartyDictionaryEntry[],
+  _dictionary: unknown,
 ): Promise<ParsedPoll[]> {
   if (!apiKey.trim()) {
     throw new Error("חסר API Key. היכנס להגדרות והוסף מפתח AI.");
   }
-
-  validateDictionary(dictionary);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -128,10 +71,7 @@ export async function parseWithOpenAI(
       model: model || "gpt-5-mini",
       input: [
         { role: "system", content: SYSTEM },
-        {
-          role: "user",
-          content: `PARTY_DICTIONARY_REFERENCE:\n${buildDictionaryText(dictionary)}\n\nPOLL_TEXT:\n${text}`,
-        },
+        { role: "user", content: `POLL_TEXT:\n${text}` },
       ],
       text: {
         format: {
@@ -204,19 +144,12 @@ export async function parseWithOpenAI(
 
   validateParseResponse(parsedResponse);
 
-  const knownPartyIds = new Set(dictionary.map((party) => party.id));
-
   return parsedResponse.polls.map((poll) => ({
     id: createId("parsed"),
     source: poll.source.trim(),
-    parties: poll.parties.map((party) => {
-      const partyId = findDictionaryPartyId(party.sourceName, dictionary);
-
-      return {
-        name: party.sourceName.trim(),
-        seats: party.seats,
-        partyId: partyId && knownPartyIds.has(partyId) ? partyId : undefined,
-      };
-    }) as ParsedPoll["parties"],
+    parties: poll.parties.map((party) => ({
+      name: party.sourceName.trim(),
+      seats: party.seats,
+    })),
   }));
 }
