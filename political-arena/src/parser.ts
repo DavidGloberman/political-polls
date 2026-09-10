@@ -3,7 +3,7 @@ import type {
   ParsedPoll,
   PartyDictionaryEntry,
 } from "./types";
-import { createId } from "./utils";
+import { createId, normalizePartyName } from "./utils";
 
 const SYSTEM = `You are a strict parser for Hebrew election poll text.
 
@@ -33,6 +33,66 @@ function buildDictionaryText(dictionary: PartyDictionaryEntry[]) {
     null,
     2,
   );
+}
+
+function isKnownPartyMatch(
+  partyId: string,
+  sourceName: string,
+  dictionary: PartyDictionaryEntry[],
+) {
+  const party = dictionary.find((entry) => entry.id === partyId);
+
+  if (!party) {
+    return false;
+  }
+
+  const normalizedSourceName = normalizePartyName(sourceName);
+
+  return (
+    normalizePartyName(party.name) === normalizedSourceName ||
+    party.aliases.some(
+      (alias) => normalizePartyName(alias) === normalizedSourceName,
+    )
+  );
+}
+
+function validateParseResponse(
+  response: ParseResponse,
+  dictionary: PartyDictionaryEntry[],
+) {
+  for (const poll of response.polls) {
+    if (!poll.source.trim()) {
+      throw new Error("ה-AI החזיר סקר ללא מקור.");
+    }
+
+    const seenPartyIds = new Set<string>();
+
+    for (const party of poll.parties) {
+      if (!party.sourceName.trim()) {
+        throw new Error("ה-AI החזיר מפלגה ללא שם.");
+      }
+
+      if (party.seats !== null && party.seats < 0) {
+        throw new Error("ה-AI החזיר מספר מנדטים לא תקין.");
+      }
+
+      if (party.partyId !== null) {
+        if (!isKnownPartyMatch(party.partyId, party.sourceName, dictionary)) {
+          throw new Error(
+            `ה-AI ניסה לשייך את "${party.sourceName}" למפלגה שאינה תואמת למילון.`,
+          );
+        }
+
+        if (seenPartyIds.has(party.partyId)) {
+          throw new Error(
+            `המפלגה "${party.sourceName}" הופיעה יותר מפעם אחת באותו סקר.`,
+          );
+        }
+
+        seenPartyIds.add(party.partyId);
+      }
+    }
+  }
 }
 
 export async function parseWithOpenAI(
@@ -122,14 +182,23 @@ export async function parseWithOpenAI(
     throw new Error("לא התקבלה תשובת JSON מה-AI.");
   }
 
-  const parsedResponse = JSON.parse(outputText) as ParseResponse;
+  let parsedResponse: ParseResponse;
+
+  try {
+    parsedResponse = JSON.parse(outputText) as ParseResponse;
+  } catch {
+    throw new Error("ה-AI החזיר JSON לא תקין.");
+  }
+
+  validateParseResponse(parsedResponse, dictionary);
+
   const knownPartyIds = new Set(dictionary.map((party) => party.id));
 
   return parsedResponse.polls.map((poll) => ({
     id: createId("parsed"),
-    source: poll.source,
+    source: poll.source.trim(),
     parties: poll.parties.map((party) => ({
-      name: party.sourceName,
+      name: party.sourceName.trim(),
       seats: party.seats,
       partyId:
         party.partyId && knownPartyIds.has(party.partyId)
