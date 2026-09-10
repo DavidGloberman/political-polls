@@ -65,6 +65,18 @@ function validateDictionary(dictionary: PartyDictionaryEntry[]) {
   }
 }
 
+function findDictionaryPartyId(
+  sourceName: string,
+  dictionary: PartyDictionaryEntry[],
+) {
+  const normalizedSourceName = normalizePartyName(sourceName);
+  return dictionary.find((party) =>
+    [party.name, ...party.aliases].some(
+      (name) => normalizePartyName(name) === normalizedSourceName,
+    ),
+  )?.id;
+}
+
 function isKnownPartyMatch(
   partyId: string,
   sourceName: string,
@@ -106,20 +118,25 @@ function validateParseResponse(
         throw new Error("ה-AI החזיר מספר מנדטים לא תקין.");
       }
 
+      const resolvedPartyId =
+        party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary);
+
       if (party.partyId !== null) {
         if (!isKnownPartyMatch(party.partyId, party.sourceName, dictionary)) {
           throw new Error(
             `ה-AI ניסה לשייך את "${party.sourceName}" למפלגה שאינה תואמת למילון.`,
           );
         }
+      }
 
-        if (seenPartyIds.has(party.partyId)) {
-          throw new Error(
-            `המפלגה "${party.sourceName}" הופיעה יותר מפעם אחת באותו סקר.`,
-          );
-        }
+      if (resolvedPartyId && seenPartyIds.has(resolvedPartyId)) {
+        throw new Error(
+          `המפלגה "${party.sourceName}" הופיעה יותר מפעם אחת באותו סקר.`,
+        );
+      }
 
-        seenPartyIds.add(party.partyId);
+      if (resolvedPartyId) {
+        seenPartyIds.add(resolvedPartyId);
       }
     }
   }
@@ -233,8 +250,11 @@ export async function parseWithOpenAI(
       name: party.sourceName.trim(),
       seats: party.seats,
       partyId:
-        party.partyId && knownPartyIds.has(party.partyId)
-          ? party.partyId
+        (party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary)) &&
+        knownPartyIds.has(
+          party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary)!,
+        )
+          ? party.partyId ?? findDictionaryPartyId(party.sourceName, dictionary)
           : undefined,
     })) as ParsedPoll["parties"],
   }));
