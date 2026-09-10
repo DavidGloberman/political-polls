@@ -91,6 +91,16 @@
   color: #8299bd;
 }
 
+.dictionary-modal > p {
+  font-size: 0;
+}
+
+.dictionary-modal > p::after {
+  content: "השם הראשי הוא השם שהמערכת מציגה. שמות חלופיים הם שמות נוספים שהמערכת יכולה לזהות כשייכים לאותה מפלגה.";
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .dictionary-list {
   display: grid;
   gap: 10px;
@@ -198,6 +208,11 @@
   min-height: 32px;
   border-color: #29466f;
   background: #0b1b34;
+  font-size: 0;
+}
+
+.dictionary-item > .small::after {
+  content: "הוסף שם חלופי";
   font-size: 11px;
 }
 
