@@ -11,7 +11,11 @@ export const createId = (prefix = "id") =>
   `${prefix}-${crypto.randomUUID()}`;
 
 export function normalizePartyName(name: string) {
-  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("he");
+  return name
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/["״“”׳'’]/g, "")
+    .toLocaleLowerCase("he");
 }
 
 export function displayPartyName(name: string) {
@@ -68,22 +72,17 @@ export function validateTable(table: PollTable): ValidationResult[] {
 export const allValid = (table: PollTable) =>
   validateTable(table).every((result) => result.valid);
 
-function addDictionaryEntry(
+function findDictionaryPartyId(
+  name: string,
   dictionary: PartyDictionaryEntry[],
-  party: TableParty,
-  sourceName: string,
 ) {
-  const existing = dictionary.find((entry) => entry.id === party.id);
+  const normalizedName = normalizePartyName(name);
 
-  if (existing) {
-    return;
-  }
-
-  dictionary.push({
-    id: party.id,
-    name: party.name,
-    aliases: sourceName === party.name ? [] : [sourceName],
-  });
+  return dictionary.find((entry) =>
+    [entry.name, ...entry.aliases].some(
+      (candidate) => normalizePartyName(candidate) === normalizedName,
+    ),
+  )?.id;
 }
 
 export function mergePolls(
@@ -115,9 +114,18 @@ export function mergePolls(
     });
 
     for (const rawParty of incomingPoll.parties) {
+      const dictionaryPartyId = findDictionaryPartyId(
+        rawParty.name,
+        dictionary,
+      );
+
       let party = rawParty.partyId
         ? partiesById.get(rawParty.partyId)
         : undefined;
+
+      if (!party && dictionaryPartyId) {
+        party = partiesById.get(dictionaryPartyId);
+      }
 
       if (!party) {
         party = partiesByName.get(normalizePartyName(rawParty.name));
@@ -125,14 +133,13 @@ export function mergePolls(
 
       if (!party) {
         const newParty: TableParty = {
-          id: createId("party"),
+          id: rawParty.partyId ?? dictionaryPartyId ?? createId("party"),
           name: rawParty.name.trim(),
           values: {},
         };
         nextTable.parties.push(newParty);
         partiesById.set(newParty.id, newParty);
         partiesByName.set(normalizePartyName(newParty.name), newParty);
-        addDictionaryEntry(dictionary, newParty, rawParty.name.trim());
         party = newParty;
       }
 
