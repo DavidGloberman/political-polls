@@ -72,6 +72,8 @@ function App() {
   );
   const [draggedPartyId, setDraggedPartyId] = useState<string | null>(null);
   const [draggedPollId, setDraggedPollId] = useState<string | null>(null);
+  const [editingPartyNames, setEditingPartyNames] = useState<Record<string, string>>({});
+  const [editingDictionaryNames, setEditingDictionaryNames] = useState<Record<string, string>>({});
 
   useEffect(() => saveTable(table), [table]);
   useEffect(() => savePartyDictionary(dictionary), [dictionary]);
@@ -153,15 +155,10 @@ function App() {
     }
   };
 
-  const renameParty = (partyId: string, newName: string) => {
+  const renameDictionaryEntry = (partyId: string, newName: string) => {
     const trimmedName = newName.trim();
     if (!trimmedName) {
-      return;
-    }
-
-    const currentParty = table?.parties.find((party) => party.id === partyId);
-    if (!currentParty) {
-      return;
+      return false;
     }
 
     const duplicate = dictionary.find(
@@ -175,19 +172,13 @@ function App() {
 
     if (duplicate) {
       setMessage(`השם כבר משויך למפלגה "${duplicate.name}".`);
-      return;
+      return false;
     }
 
-    setTable((current) =>
-      current
-        ? {
-            ...current,
-            parties: current.parties.map((party) =>
-              party.id === partyId ? { ...party, name: trimmedName } : party,
-            ),
-          }
-        : current,
-    );
+    const currentEntry = dictionary.find((entry) => entry.id === partyId);
+    if (!currentEntry) {
+      return false;
+    }
 
     setDictionary((current) =>
       current.map((entry) => {
@@ -209,6 +200,70 @@ function App() {
         return { ...entry, name: trimmedName, aliases };
       }),
     );
+
+    setTable((current) =>
+      current
+        ? {
+            ...current,
+            parties: current.parties.map((party) =>
+              party.id === partyId ? { ...party, name: trimmedName } : party,
+            ),
+          }
+        : current,
+    );
+
+    return true;
+  };
+
+  const renameParty = (partyId: string, newName: string) =>
+    renameDictionaryEntry(partyId, newName);
+
+  const commitPartyName = (partyId: string) => {
+    const draft = editingPartyNames[partyId];
+    if (draft === undefined) {
+      return;
+    }
+
+    const currentName = table?.parties.find((party) => party.id === partyId)?.name;
+    const changed = draft.trim() !== (currentName ?? "").trim();
+
+    if (!changed || renameParty(partyId, draft)) {
+      setEditingPartyNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    } else {
+      setEditingPartyNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    }
+  };
+
+  const commitDictionaryName = (partyId: string) => {
+    const draft = editingDictionaryNames[partyId];
+    if (draft === undefined) {
+      return;
+    }
+
+    const currentName = dictionary.find((entry) => entry.id === partyId)?.name;
+    const changed = draft.trim() !== (currentName ?? "").trim();
+
+    if (!changed || renameDictionaryEntry(partyId, draft)) {
+      setEditingDictionaryNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    } else {
+      setEditingDictionaryNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    }
   };
 
   const updateAlias = (
@@ -227,6 +282,42 @@ function App() {
         return { ...entry, aliases };
       }),
     );
+  };
+
+  const commitAlias = (partyId: string, aliasIndex: number) => {
+    const entry = dictionary.find((item) => item.id === partyId);
+    if (!entry) {
+      return;
+    }
+
+    const value = entry.aliases[aliasIndex]?.trim() ?? "";
+    if (!value) {
+      removeAlias(partyId, aliasIndex);
+      return;
+    }
+
+    if (normalizePartyName(value) === normalizePartyName(entry.name)) {
+      setMessage("Alias לא יכול להיות זהה לשם הראשי.");
+      removeAlias(partyId, aliasIndex);
+      return;
+    }
+
+    const duplicate = dictionary.find(
+      (candidate) =>
+        candidate.id !== partyId &&
+        (normalizePartyName(candidate.name) === normalizePartyName(value) ||
+          candidate.aliases.some(
+            (alias) => normalizePartyName(alias) === normalizePartyName(value),
+          )),
+    );
+
+    if (duplicate) {
+      setMessage(`השם כבר משויך למפלגה "${duplicate.name}".`);
+      removeAlias(partyId, aliasIndex);
+      return;
+    }
+
+    updateAlias(partyId, aliasIndex, value);
   };
 
   const addAlias = (partyId: string) => {
@@ -253,6 +344,11 @@ function App() {
   };
 
   const removeParty = (partyId: string) => {
+    if (table?.parties.some((party) => party.id === partyId)) {
+      setMessage("לא ניתן למחוק מהמילון מפלגה שנמצאת בטבלה. מחק את השורה מהטבלה קודם.");
+      return;
+    }
+
     setDictionary((current) => current.filter((entry) => entry.id !== partyId));
   };
 
@@ -591,15 +687,24 @@ function App() {
                         <div className="party">
                           <GripVertical size={16} />
                           <input
-                            value={party.name}
-                            onChange={(event) =>
-                              renameParty(party.id, event.target.value)
+                            value={editingPartyNames[party.id] ?? party.name}
+                            onFocus={() =>
+                              setEditingPartyNames((current) => ({
+                                ...current,
+                                [party.id]: party.name,
+                              }))
                             }
+                            onChange={(event) =>
+                              setEditingPartyNames((current) => ({
+                                ...current,
+                                [party.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => commitPartyName(party.id)}
                           />
                           <button
                             className="icon danger"
                             onClick={() => {
-                              removeParty(party.id);
                               updateTable((current) => ({
                                 ...current,
                                 parties: current.parties.filter(
@@ -801,22 +906,20 @@ function App() {
                 <div className="dictionary-item" key={entry.id}>
                   <div className="dictionary-name-row">
                     <input
-                      value={entry.name}
-                      onChange={(event) =>
-                        setDictionary((current) =>
-                          current.map((item) =>
-                            item.id === entry.id
-                              ? { ...item, name: event.target.value }
-                              : item,
-                          ),
-                        )
+                      value={editingDictionaryNames[entry.id] ?? entry.name}
+                      onFocus={() =>
+                        setEditingDictionaryNames((current) => ({
+                          ...current,
+                          [entry.id]: entry.name,
+                        }))
                       }
-                      onBlur={() => {
-                        const item = dictionary.find((candidate) => candidate.id === entry.id);
-                        if (item && item.name.trim()) {
-                          renameParty(entry.id, item.name);
-                        }
-                      }}
+                      onChange={(event) =>
+                        setEditingDictionaryNames((current) => ({
+                          ...current,
+                          [entry.id]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => commitDictionaryName(entry.id)}
                     />
                     <button
                       className="icon danger"
@@ -835,6 +938,7 @@ function App() {
                           onChange={(event) =>
                             updateAlias(entry.id, index, event.target.value)
                           }
+                          onBlur={() => commitAlias(entry.id, index)}
                         />
                         <button
                           className="icon"
