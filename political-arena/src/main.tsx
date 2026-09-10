@@ -5,6 +5,7 @@ import {
   GripVertical,
   ImageDown,
   LoaderCircle,
+  Menu,
   Plus,
   RotateCcw,
   Save,
@@ -14,12 +15,20 @@ import {
   X,
 } from "lucide-react";
 import "./styles.css";
-import type { PollTable } from "./types";
-import { clearTable, loadTable, saveTable } from "./storage";
+import "./partyDictionary.css";
+import type { PartyDictionaryEntry, PollTable } from "./types";
+import {
+  clearTable,
+  loadPartyDictionary,
+  loadTable,
+  savePartyDictionary,
+  saveTable,
+} from "./storage";
 import {
   allValid,
   createId,
   mergePolls,
+  normalizePartyName,
   sortPartiesByFirstPoll,
   validateTable,
 } from "./utils";
@@ -30,12 +39,31 @@ import { downloadTableAsPng } from "./exportImage";
 const API_KEY_STORAGE = "political-arena-openai-key";
 const MODEL_STORAGE = "political-arena-model";
 
+function getInitialDictionary(table: PollTable | null) {
+  const stored = loadPartyDictionary();
+
+  if (stored.length || !table) {
+    return stored;
+  }
+
+  return table.parties.map((party) => ({
+    id: party.id,
+    name: party.name,
+    aliases: [],
+  }));
+}
+
 function App() {
   const [table, setTable] = useState<PollTable | null>(() => loadTable());
+  const [dictionary, setDictionary] = useState<PartyDictionaryEntry[]>(() =>
+    getInitialDictionary(loadTable()),
+  );
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dictionaryOpen, setDictionaryOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [apiKey, setApiKey] = useState(
     () => localStorage.getItem(API_KEY_STORAGE) || "",
   );
@@ -44,8 +72,11 @@ function App() {
   );
   const [draggedPartyId, setDraggedPartyId] = useState<string | null>(null);
   const [draggedPollId, setDraggedPollId] = useState<string | null>(null);
+  const [editingPartyNames, setEditingPartyNames] = useState<Record<string, string>>({});
+  const [editingDictionaryNames, setEditingDictionaryNames] = useState<Record<string, string>>({});
 
   useEffect(() => saveTable(table), [table]);
+  useEffect(() => savePartyDictionary(dictionary), [dictionary]);
 
   const validationResults = useMemo(
     () => (table ? validateTable(table) : []),
@@ -67,17 +98,21 @@ function App() {
     setMessage(null);
 
     try {
-      const parsedPolls = await parseWithOpenAI(text, apiKey, model);
+      const parsedPolls = await parseWithOpenAI(text, apiKey, model, dictionary);
 
       if (!parsedPolls.length) {
         throw new Error("לא נמצאו סקרים בטקסט.");
       }
 
-      setTable((current) =>
-        current
-          ? mergePolls(current, parsedPolls)
-          : sortPartiesByFirstPoll(mergePolls(null, parsedPolls)),
-      );
+      const nextDictionary = structuredClone(dictionary);
+      const nextTable = table
+        ? mergePolls(table, parsedPolls, nextDictionary)
+        : sortPartiesByFirstPoll(
+            mergePolls(null, parsedPolls, nextDictionary),
+          );
+
+      setDictionary(nextDictionary);
+      setTable(nextTable);
       setText("");
       setMessage(`נוספו ${parsedPolls.length} סקרים בהצלחה.`);
     } catch (error) {
@@ -118,6 +153,203 @@ function App() {
       setText("");
       setMessage(null);
     }
+  };
+
+  const renameDictionaryEntry = (partyId: string, newName: string) => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      return false;
+    }
+
+    const duplicate = dictionary.find(
+      (entry) =>
+        entry.id !== partyId &&
+        (normalizePartyName(entry.name) === normalizePartyName(trimmedName) ||
+          entry.aliases.some(
+            (alias) => normalizePartyName(alias) === normalizePartyName(trimmedName),
+          )),
+    );
+
+    if (duplicate) {
+      setMessage(`השם כבר משויך למפלגה "${duplicate.name}".`);
+      return false;
+    }
+
+    const currentEntry = dictionary.find((entry) => entry.id === partyId);
+    if (!currentEntry) {
+      return false;
+    }
+
+    setDictionary((current) =>
+      current.map((entry) => {
+        if (entry.id !== partyId) {
+          return entry;
+        }
+
+        const aliases = [...entry.aliases];
+        if (
+          entry.name.trim() !== trimmedName &&
+          entry.name.trim() &&
+          !aliases.some(
+            (alias) => normalizePartyName(alias) === normalizePartyName(entry.name),
+          )
+        ) {
+          aliases.push(entry.name.trim());
+        }
+
+        return { ...entry, name: trimmedName, aliases };
+      }),
+    );
+
+    setTable((current) =>
+      current
+        ? {
+            ...current,
+            parties: current.parties.map((party) =>
+              party.id === partyId ? { ...party, name: trimmedName } : party,
+            ),
+          }
+        : current,
+    );
+
+    return true;
+  };
+
+  const renameParty = (partyId: string, newName: string) =>
+    renameDictionaryEntry(partyId, newName);
+
+  const commitPartyName = (partyId: string) => {
+    const draft = editingPartyNames[partyId];
+    if (draft === undefined) {
+      return;
+    }
+
+    const currentName = table?.parties.find((party) => party.id === partyId)?.name;
+    const changed = draft.trim() !== (currentName ?? "").trim();
+
+    if (!changed || renameParty(partyId, draft)) {
+      setEditingPartyNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    } else {
+      setEditingPartyNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    }
+  };
+
+  const commitDictionaryName = (partyId: string) => {
+    const draft = editingDictionaryNames[partyId];
+    if (draft === undefined) {
+      return;
+    }
+
+    const currentName = dictionary.find((entry) => entry.id === partyId)?.name;
+    const changed = draft.trim() !== (currentName ?? "").trim();
+
+    if (!changed || renameDictionaryEntry(partyId, draft)) {
+      setEditingDictionaryNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    } else {
+      setEditingDictionaryNames((current) => {
+        const next = { ...current };
+        delete next[partyId];
+        return next;
+      });
+    }
+  };
+
+  const updateAlias = (
+    partyId: string,
+    aliasIndex: number,
+    value: string,
+  ) => {
+    setDictionary((current) =>
+      current.map((entry) => {
+        if (entry.id !== partyId) {
+          return entry;
+        }
+
+        const aliases = [...entry.aliases];
+        aliases[aliasIndex] = value;
+        return { ...entry, aliases };
+      }),
+    );
+  };
+
+  const commitAlias = (partyId: string, aliasIndex: number) => {
+    const entry = dictionary.find((item) => item.id === partyId);
+    if (!entry) {
+      return;
+    }
+
+    const value = entry.aliases[aliasIndex]?.trim() ?? "";
+    if (!value) {
+      removeAlias(partyId, aliasIndex);
+      return;
+    }
+
+    if (normalizePartyName(value) === normalizePartyName(entry.name)) {
+      setMessage("Alias לא יכול להיות זהה לשם הראשי.");
+      removeAlias(partyId, aliasIndex);
+      return;
+    }
+
+    const duplicate = dictionary.find(
+      (candidate) =>
+        candidate.id !== partyId &&
+        (normalizePartyName(candidate.name) === normalizePartyName(value) ||
+          candidate.aliases.some(
+            (alias) => normalizePartyName(alias) === normalizePartyName(value),
+          )),
+    );
+
+    if (duplicate) {
+      setMessage(`השם כבר משויך למפלגה "${duplicate.name}".`);
+      removeAlias(partyId, aliasIndex);
+      return;
+    }
+
+    updateAlias(partyId, aliasIndex, value);
+  };
+
+  const addAlias = (partyId: string) => {
+    setDictionary((current) =>
+      current.map((entry) =>
+        entry.id === partyId
+          ? { ...entry, aliases: [...entry.aliases, ""] }
+          : entry,
+      ),
+    );
+  };
+
+  const removeAlias = (partyId: string, aliasIndex: number) => {
+    setDictionary((current) =>
+      current.map((entry) =>
+        entry.id === partyId
+          ? {
+              ...entry,
+              aliases: entry.aliases.filter((_, index) => index !== aliasIndex),
+            }
+          : entry,
+      ),
+    );
+  };
+
+  const removeParty = (partyId: string) => {
+    if (table?.parties.some((party) => party.id === partyId)) {
+      setMessage("לא ניתן למחוק מהמילון מפלגה שנמצאת בטבלה. מחק את השורה מהטבלה קודם.");
+      return;
+    }
+
+    setDictionary((current) => current.filter((entry) => entry.id !== partyId));
   };
 
   const updateCell = (partyId: string, pollId: string, value: string) => {
@@ -165,7 +397,6 @@ function App() {
 
         const [movedParty] = parties.splice(sourceIndex, 1);
         parties.splice(targetIndex, 0, movedParty);
-
         return { ...current, parties };
       }
 
@@ -179,7 +410,6 @@ function App() {
 
       const [movedPoll] = polls.splice(sourceIndex, 1);
       polls.splice(targetIndex, 0, movedPoll);
-
       return { ...current, polls };
     });
 
@@ -207,9 +437,36 @@ function App() {
               <RotateCcw size={16} /> התחל מחדש
             </button>
           )}
-          <button className="ghost" onClick={() => setSettingsOpen(true)}>
-            <Settings size={16} /> הגדרות AI
-          </button>
+
+          <div className="menu-wrap">
+            <button
+              className="ghost menu-button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label="תפריט"
+            >
+              <Menu size={19} />
+            </button>
+            {menuOpen && (
+              <div className="menu-dropdown">
+                <button
+                  onClick={() => {
+                    setDictionaryOpen(true);
+                    setMenuOpen(false);
+                  }}
+                >
+                  ניהול שמות מפלגות
+                </button>
+                <button
+                  onClick={() => {
+                    setSettingsOpen(true);
+                    setMenuOpen(false);
+                  }}
+                >
+                  <Settings size={15} /> הגדרות AI
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -430,31 +687,31 @@ function App() {
                         <div className="party">
                           <GripVertical size={16} />
                           <input
-                            value={party.name}
-                            onChange={(event) =>
-                              updateTable((current) => ({
+                            value={editingPartyNames[party.id] ?? party.name}
+                            onFocus={() =>
+                              setEditingPartyNames((current) => ({
                                 ...current,
-                                parties: current.parties.map((currentParty) =>
-                                  currentParty.id === party.id
-                                    ? {
-                                        ...currentParty,
-                                        name: event.target.value,
-                                      }
-                                    : currentParty,
-                                ),
+                                [party.id]: party.name,
                               }))
                             }
+                            onChange={(event) =>
+                              setEditingPartyNames((current) => ({
+                                ...current,
+                                [party.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => commitPartyName(party.id)}
                           />
                           <button
                             className="icon danger"
-                            onClick={() =>
+                            onClick={() => {
                               updateTable((current) => ({
                                 ...current,
                                 parties: current.parties.filter(
                                   (currentParty) => currentParty.id !== party.id,
                                 ),
-                              }))
-                            }
+                              }));
+                            }}
                           >
                             <Trash2 size={13} />
                           </button>
@@ -499,21 +756,26 @@ function App() {
             <div className="editor-foot">
               <button
                 className="secondary"
-                onClick={() =>
+                onClick={() => {
+                  const id = createId("party");
                   updateTable((current) => ({
                     ...current,
                     parties: [
                       ...current.parties,
                       {
-                        id: createId("party"),
+                        id,
                         name: "מפלגה חדשה",
                         values: Object.fromEntries(
                           current.polls.map((poll) => [poll.id, null]),
                         ),
                       },
                     ],
-                  }))
-                }
+                  }));
+                  setDictionary((current) => [
+                    ...current,
+                    { id, name: "מפלגה חדשה", aliases: [] },
+                  ]);
+                }}
               >
                 <Plus size={16} /> הוסף מפלגה
               </button>
@@ -564,10 +826,7 @@ function App() {
       )}
 
       {settingsOpen && (
-        <div
-          className="backdrop"
-          onMouseDown={() => setSettingsOpen(false)}
-        >
+        <div className="backdrop" onMouseDown={() => setSettingsOpen(false)}>
           <div
             className="modal"
             onMouseDown={(event) => event.stopPropagation()}
@@ -576,10 +835,7 @@ function App() {
               <b>
                 <Settings size={18} /> הגדרות AI
               </b>
-              <button
-                className="icon"
-                onClick={() => setSettingsOpen(false)}
-              >
+              <button className="icon" onClick={() => setSettingsOpen(false)}>
                 <X />
               </button>
             </div>
@@ -626,12 +882,106 @@ function App() {
           </div>
         </div>
       )}
+
+      {dictionaryOpen && (
+        <div className="backdrop" onMouseDown={() => setDictionaryOpen(false)}>
+          <div
+            className="modal dictionary-modal"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-head">
+              <b>ניהול שמות מפלגות</b>
+              <button className="icon" onClick={() => setDictionaryOpen(false)}>
+                <X />
+              </button>
+            </div>
+
+            <p>
+              השם הראשי הוא השם שהמערכת מציגה. aliases הם שמות חלופיים שה-AI
+              רשאי להתאים אליו. המערכת לא מוסיפה aliases בעצמה.
+            </p>
+
+            <div className="dictionary-list">
+              {dictionary.map((entry) => (
+                <div className="dictionary-item" key={entry.id}>
+                  <div className="dictionary-name-row">
+                    <input
+                      value={editingDictionaryNames[entry.id] ?? entry.name}
+                      onFocus={() =>
+                        setEditingDictionaryNames((current) => ({
+                          ...current,
+                          [entry.id]: entry.name,
+                        }))
+                      }
+                      onChange={(event) =>
+                        setEditingDictionaryNames((current) => ({
+                          ...current,
+                          [entry.id]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => commitDictionaryName(entry.id)}
+                    />
+                    <button
+                      className="icon danger"
+                      onClick={() => removeParty(entry.id)}
+                      title="מחק מהמילון"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  <div className="aliases">
+                    {entry.aliases.map((alias, index) => (
+                      <div className="alias-row" key={`${entry.id}-${index}`}>
+                        <input
+                          value={alias}
+                          onChange={(event) =>
+                            updateAlias(entry.id, index, event.target.value)
+                          }
+                          onBlur={() => commitAlias(entry.id, index)}
+                        />
+                        <button
+                          className="icon"
+                          onClick={() => removeAlias(entry.id, index)}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="small" onClick={() => addAlias(entry.id)}>
+                    <Plus size={13} /> הוסף alias
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="secondary"
+                onClick={() => {
+                  const id = createId("party");
+                  setDictionary((current) => [
+                    ...current,
+                    { id, name: "מפלגה חדשה", aliases: [] },
+                  ]);
+                }}
+              >
+                <Plus size={15} /> הוסף מפלגה
+              </button>
+              <button
+                className="primary"
+                onClick={() => setDictionaryOpen(false)}
+              >
+                סיום
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+createRoot(document.getElementById("root")!).render(<App />);

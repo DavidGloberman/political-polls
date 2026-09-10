@@ -1,12 +1,61 @@
 import type { ParseResponse, ParsedPoll } from "./types";
-import { createId } from "./utils";
+import { createId, normalizePartyName } from "./utils";
 
-const SYSTEM = `You strictly parse Hebrew election poll text. Return ONLY JSON. Do not invent, infer, correct, calculate, or add data. Numeric seats must be integers explicitly present. If a party has no numeric seat count or is explicitly described as not passing the threshold, seats=null. Source is required; if it cannot be identified, return an empty polls array. Preserve supplied source and party names. Shape: {"polls":[{"source":"string","parties":[{"name":"string","seats":number|null}]}]}.`;
+const SYSTEM = `You are a strict parser for Hebrew election poll text.
+
+Your only responsibility is to extract the data explicitly written in the supplied text.
+
+Extract:
+1. Each poll and its source name.
+2. Each party name exactly as it appears in that poll.
+3. The integer seat count explicitly associated with that party.
+
+Parsing rules:
+- Return only information explicitly present in the supplied text.
+- Do not invent, infer, correct, calculate, complete, redistribute, or guess seat counts.
+- seats must be the integer explicitly associated with that party, or null when no numeric seat count is explicitly present.
+- If a party is explicitly described as not passing the threshold and no seat count is present, seats=null.
+- Preserve the party name as it appears in the source text in sourceName.
+- Source is required. If a poll source cannot be identified, do not invent one.
+- Do not merge two source names unless the text itself identifies them as the same source.
+- Do not create parties that are not represented by the supplied text.
+- Do not use political knowledge or external knowledge.
+- Do not match parties to a dictionary. Party matching is performed deterministically by the application after parsing.
+- Return JSON only and follow the supplied schema exactly.`;
+
+function validateParseResponse(response: ParseResponse) {
+  for (const poll of response.polls) {
+    if (!poll.source.trim()) {
+      throw new Error("ה-AI החזיר סקר ללא מקור.");
+    }
+
+    const seenNames = new Set<string>();
+
+    for (const party of poll.parties) {
+      if (!party.sourceName.trim()) {
+        throw new Error("ה-AI החזיר מפלגה ללא שם.");
+      }
+
+      if (party.seats !== null && party.seats < 0) {
+        throw new Error("ה-AI החזיר מספר מנדטים לא תקין.");
+      }
+
+      const normalizedName = normalizePartyName(party.sourceName);
+      if (seenNames.has(normalizedName)) {
+        throw new Error(
+          `המפלגה "${party.sourceName}" הופיעה יותר מפעם אחת באותו סקר.`,
+        );
+      }
+      seenNames.add(normalizedName);
+    }
+  }
+}
 
 export async function parseWithOpenAI(
   text: string,
   apiKey: string,
   model: string,
+  _dictionary: unknown,
 ): Promise<ParsedPoll[]> {
   if (!apiKey.trim()) {
     throw new Error("חסר API Key. היכנס להגדרות והוסף מפתח AI.");
@@ -22,7 +71,7 @@ export async function parseWithOpenAI(
       model: model || "gpt-5-mini",
       input: [
         { role: "system", content: SYSTEM },
-        { role: "user", content: text },
+        { role: "user", content: `POLL_TEXT:\n${text}` },
       ],
       text: {
         format: {
@@ -46,10 +95,10 @@ export async function parseWithOpenAI(
                         type: "object",
                         additionalProperties: false,
                         properties: {
-                          name: { type: "string" },
+                          sourceName: { type: "string" },
                           seats: { type: ["integer", "null"] },
                         },
-                        required: ["name", "seats"],
+                        required: ["sourceName", "seats"],
                       },
                     },
                   },
@@ -85,11 +134,22 @@ export async function parseWithOpenAI(
     throw new Error("לא התקבלה תשובת JSON מה-AI.");
   }
 
-  const parsedResponse = JSON.parse(outputText) as ParseResponse;
+  let parsedResponse: ParseResponse;
+
+  try {
+    parsedResponse = JSON.parse(outputText) as ParseResponse;
+  } catch {
+    throw new Error("ה-AI החזיר JSON לא תקין.");
+  }
+
+  validateParseResponse(parsedResponse);
 
   return parsedResponse.polls.map((poll) => ({
     id: createId("parsed"),
-    source: poll.source,
-    parties: poll.parties,
+    source: poll.source.trim(),
+    parties: poll.parties.map((party) => ({
+      name: party.sourceName.trim(),
+      seats: party.seats,
+    })),
   }));
 }
