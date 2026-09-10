@@ -35,6 +35,36 @@ function buildDictionaryText(dictionary: PartyDictionaryEntry[]) {
   );
 }
 
+function validateDictionary(dictionary: PartyDictionaryEntry[]) {
+  const names = new Map<string, string>();
+
+  for (const entry of dictionary) {
+    if (!entry.id.trim() || !entry.name.trim()) {
+      throw new Error("מילון המפלגות מכיל רשומה ללא ID או שם.");
+    }
+
+    const values = [entry.name, ...entry.aliases];
+
+    for (const value of values) {
+      const normalized = normalizePartyName(value);
+
+      if (!normalized) {
+        continue;
+      }
+
+      const existingPartyId = names.get(normalized);
+
+      if (existingPartyId && existingPartyId !== entry.id) {
+        throw new Error(
+          `השם "${value.trim()}" משויך ליותר ממפלגה אחת במילון.`,
+        );
+      }
+
+      names.set(normalized, entry.id);
+    }
+  }
+}
+
 function isKnownPartyMatch(
   partyId: string,
   sourceName: string,
@@ -104,6 +134,8 @@ export async function parseWithOpenAI(
   if (!apiKey.trim()) {
     throw new Error("חסר API Key. היכנס להגדרות והוסף מפתח AI.");
   }
+
+  validateDictionary(dictionary);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
