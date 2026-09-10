@@ -14,6 +14,19 @@ export function normalizePartyName(name: string) {
   return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("he");
 }
 
+export function displayPartyName(name: string) {
+  const normalizedName = normalizePartyName(name);
+
+  const displayNames: Record<string, string> = {
+    שס: "ש״ס",
+    רעמ: "רע״ם",
+    "הרשימה המשותפת": "המשותפת",
+    ישר: "ישר!",
+  };
+
+  return displayNames[normalizedName] ?? name.trim();
+}
+
 export function validatePoll(poll: {
   id: string;
   source: string;
