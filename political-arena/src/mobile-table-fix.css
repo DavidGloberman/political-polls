@@ -1,0 +1,61 @@
+/* Keep the sticky party column compact so poll columns remain visible on phones. */
+
+@media (max-width: 480px) {
+  .scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+  }
+
+  table {
+    min-width: 0;
+    width: max-content;
+  }
+
+  th,
+  td {
+    min-width: 104px;
+  }
+
+  .poll-table th:first-child,
+  .party-cell,
+  tbody td:first-child {
+    width: 128px;
+    min-width: 128px;
+    max-width: 128px;
+  }
+
+  .party {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .party input {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .poll-table th:first-child,
+  .party-cell,
+  tbody td:first-child {
+    box-shadow: -5px 0 10px rgba(0, 0, 0, 0.18);
+  }
+}
+
+@media (max-width: 360px) {
+  th,
+  td {
+    min-width: 96px;
+  }
+
+  .poll-table th:first-child,
+  .party-cell,
+  tbody td:first-child {
+    width: 116px;
+    min-width: 116px;
+    max-width: 116px;
+  }
+}
