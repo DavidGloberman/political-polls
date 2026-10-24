@@ -16,8 +16,9 @@ const text = (
   size: number,
   weight = 700,
   anchor = "middle",
+  fill = "#f5f8ff",
 ) =>
-  `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, DejaVu Sans, sans-serif" font-size="${size}px" font-weight="${weight}" fill="#f5f8ff">${esc(value)}</text>`;
+  `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Arial, DejaVu Sans, sans-serif" font-size="${size}px" font-weight="${weight}" fill="${fill}">${esc(value)}</text>`;
 
 export async function downloadTableAsPng(table: PollTable) {
   const validation = validateTable(table);
@@ -48,9 +49,9 @@ export async function downloadTableAsPng(table: PollTable) {
   const defs = `
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#071022"/>
-        <stop offset="55%" stop-color="#111b3c"/>
-        <stop offset="100%" stop-color="#071022"/>
+        <stop offset="0%" stop-color="#f8faff"/>
+        <stop offset="55%" stop-color="#edf2fa"/>
+        <stop offset="100%" stop-color="#e5edf8"/>
       </linearGradient>
       <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
         <stop offset="0%" stop-color="#6759ff"/>
@@ -65,9 +66,9 @@ export async function downloadTableAsPng(table: PollTable) {
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     ${defs}
     <rect width="100%" height="100%" fill="url(#bg)"/>
-    ${text("זירה פוליטית", width / 2, 34, 23, 800)}
-    ${text(table.title || "סיכום סקרי השבוע", width / 2, 80, 42, 900)}
-    ${text("סיכום סקרי מנדטים", width / 2, 111, 18, 500)}
+    ${text("זירה פוליטית", width / 2, 34, 23, 800, "middle", "#172746")}
+    ${text(table.title || "סיכום סקרי השבוע", width / 2, 80, 42, 900, "middle", "#10203d")}
+    ${text("סיכום סקרי מנדטים", width / 2, 111, 18, 500, "middle", "#344767")}
     <rect x="${width / 2 - 90}" y="127" width="180" height="4" rx="2" fill="url(#accent)"/>
   `;
 
@@ -83,7 +84,7 @@ export async function downloadTableAsPng(table: PollTable) {
 
   table.parties.forEach((party, rowIndex) => {
     const y = tableY + headerHeight + rowIndex * rowHeight;
-    const fill = rowIndex % 2 === 0 ? "#0d1d38" : "#102442";
+    const fill = rowIndex % 2 === 0 ? "#ffffff" : "#edf3fb";
     svg += `<rect x="${partyX}" y="${y}" width="${partyWidth}" height="${rowHeight}" fill="${fill}"/>`;
     svg += text(
       displayPartyName(party.name),
@@ -91,6 +92,8 @@ export async function downloadTableAsPng(table: PollTable) {
       y + 59,
       25,
       800,
+      "middle",
+      "#172746",
     );
     table.polls.forEach((poll, index) => {
       const x = partyX - (index + 1) * pollWidth;
@@ -102,24 +105,26 @@ export async function downloadTableAsPng(table: PollTable) {
         y + 59,
         36,
         900,
+        "middle",
+        "#10203d",
       );
     });
   });
 
   const totalY = tableY + headerHeight + table.parties.length * rowHeight;
-  svg += `<rect x="${partyX}" y="${totalY}" width="${partyWidth}" height="${rowHeight}" fill="#19345d"/>`;
-  svg += text("סה״כ", partyX + partyWidth / 2, totalY + 59, 27, 900);
+  svg += `<rect x="${partyX}" y="${totalY}" width="${partyWidth}" height="${rowHeight}" fill="#dce8fa"/>`;
+  svg += text("סה״כ", partyX + partyWidth / 2, totalY + 59, 27, 900, "middle", "#172746");
   validation.forEach((result, index) => {
     const x = partyX - (index + 1) * pollWidth;
     svg += `<rect x="${x}" y="${totalY}" width="${pollWidth}" height="${rowHeight}" fill="#19345d"/>`;
-    svg += text(String(result.total), x + pollWidth / 2, totalY + 59, 32, 900);
+    svg += text(String(result.total), x + pollWidth / 2, totalY + 59, 32, 900, "middle", "#10203d");
   });
 
   const fullTableHeight = headerHeight + (table.parties.length + 1) * rowHeight;
-  svg += `<rect x="${tableX}" y="${tableY}" width="${tableWidth}" height="${fullTableHeight}" rx="10" fill="none" stroke="#3b5683" stroke-width="2"/>`;
+  svg += `<rect x="${tableX}" y="${tableY}" width="${tableWidth}" height="${fullTableHeight}" rx="10" fill="none" stroke="#a9bdd9" stroke-width="2"/>`;
   for (let i = 1; i < table.polls.length + 1; i++) {
     const x = partyX - i * pollWidth;
-    svg += `<line x1="${x}" y1="${tableY}" x2="${x}" y2="${tableY + fullTableHeight}" stroke="#29466f" stroke-width="1.5"/>`;
+    svg += `<line x1="${x}" y1="${tableY}" x2="${x}" y2="${tableY + fullTableHeight}" stroke="#c4d2e6" stroke-width="1.5"/>`;
   }
   svg += `<line x1="${partyX}" y1="${tableY}" x2="${partyX}" y2="${tableY + fullTableHeight}" stroke="#29466f" stroke-width="1.5"/>`;
   for (let i = 0; i <= table.parties.length + 1; i++) {
@@ -127,7 +132,7 @@ export async function downloadTableAsPng(table: PollTable) {
     svg += `<line x1="${tableX}" y1="${y}" x2="${tableX + tableWidth}" y2="${y}" stroke="#29466f" stroke-width="1.5"/>`;
   }
 
-  svg += text("זירה פוליטית", width - margin, height - 15, 13, 700, "end");
+  svg += text("זירה פוליטית", width - margin, height - 15, 13, 700, "end", "#344767");
   svg += `</svg>`;
 
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
