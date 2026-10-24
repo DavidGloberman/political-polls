@@ -27,7 +27,7 @@ export async function downloadTableAsPng(table: PollTable) {
 
   // Use the available canvas for the table instead of a large decorative title.
   const width = Math.max(2200, 500 + table.polls.length * 190);
-  const rowHeight = 78;
+  const rowHeight = 96;
   const headerHeight = 90;
   const titleHeight = 145;
   const footerHeight = 42;
@@ -88,8 +88,8 @@ export async function downloadTableAsPng(table: PollTable) {
     svg += text(
       displayPartyName(party.name),
       partyX + partyWidth / 2,
-      y + 49,
-      24,
+      y + 59,
+      25,
       800,
     );
     table.polls.forEach((poll, index) => {
@@ -99,8 +99,8 @@ export async function downloadTableAsPng(table: PollTable) {
       svg += text(
         value == null ? "--" : String(value),
         x + pollWidth / 2,
-        y + 49,
-        30,
+        y + 59,
+        36,
         900,
       );
     });
@@ -108,11 +108,11 @@ export async function downloadTableAsPng(table: PollTable) {
 
   const totalY = tableY + headerHeight + table.parties.length * rowHeight;
   svg += `<rect x="${partyX}" y="${totalY}" width="${partyWidth}" height="${rowHeight}" fill="#19345d"/>`;
-  svg += text("סה״כ", partyX + partyWidth / 2, totalY + 49, 25, 900);
+  svg += text("סה״כ", partyX + partyWidth / 2, totalY + 59, 27, 900);
   validation.forEach((result, index) => {
     const x = partyX - (index + 1) * pollWidth;
     svg += `<rect x="${x}" y="${totalY}" width="${pollWidth}" height="${rowHeight}" fill="#19345d"/>`;
-    svg += text(String(result.total), x + pollWidth / 2, totalY + 49, 27, 900);
+    svg += text(String(result.total), x + pollWidth / 2, totalY + 59, 32, 900);
   });
 
   const fullTableHeight = headerHeight + (table.parties.length + 1) * rowHeight;
